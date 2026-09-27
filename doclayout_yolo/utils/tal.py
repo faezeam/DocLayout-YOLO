@@ -37,7 +37,7 @@ class TaskAlignedAssigner(nn.Module):
         self.ms_factor = ms_factor
 
     @torch.no_grad()
-    def forward(self, pd_scores, pd_bboxes, anc_points, gt_labels, gt_bboxes, mask_gt, level_split, resized_shape):
+    def forward(self, pd_scores, pd_bboxes, anc_points, gt_labels, gt_bboxes, mask_gt, level_split=None, resized_shape=None):
         """
         Compute the task-aligned assignment. Reference code is available at
         https://github.com/Nioolek/PPYOLOE_pytorch/blob/master/ppyoloe/assigner/tal_assigner.py.
@@ -88,7 +88,7 @@ class TaskAlignedAssigner(nn.Module):
 
         return target_labels, target_bboxes, target_scores, fg_mask.bool(), target_gt_idx
 
-    def get_pos_mask(self, pd_scores, pd_bboxes, gt_labels, gt_bboxes, anc_points, mask_gt, level_split, resized_shape):
+    def get_pos_mask(self, pd_scores, pd_bboxes, gt_labels, gt_bboxes, anc_points, mask_gt, level_split=None, resized_shape=None):
         """Get in_gts mask, (b, max_num_obj, h*w)."""
         mask_in_gts = self.select_candidates_in_gts(anc_points, gt_bboxes)
         # Get anchor_align metric, (b, max_num_obj, h*w)
@@ -96,7 +96,7 @@ class TaskAlignedAssigner(nn.Module):
         
         # multi-scale learning modulating factor
         # only applying on lowest stride (for example, 200x200 for 1660x1600 input)
-        if self.ms_factor and self.ms_factor["beta"] and self.ms_factor["k"]:
+        if self.ms_factor and self.ms_factor["beta"] and self.ms_factor["k"] and level_split is not None:
             beta, k = self.ms_factor["beta"], self.ms_factor["k"]
             mod_factor = torch.ones_like(align_metric, dtype=align_metric.dtype, device=align_metric.device)
             level_split = [sum(level_split[:i+1]) for i, _ in enumerate(level_split)] 
@@ -285,6 +285,12 @@ class TaskAlignedAssigner(nn.Module):
 
 
 class RotatedTaskAlignedAssigner(TaskAlignedAssigner):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # get_pos_mask derives gt w/h as x2-x1, y2-y1, which assumes xyxy. Rotated gt are
+        # xywhr, so ms_factor would silently modulate on garbage instead of box area.
+        assert not self.ms_factor, "ms_factor is not supported for OBB (xywhr) targets"
+
     def iou_calculation(self, gt_bboxes, pd_bboxes):
         """IoU calculation for rotated bounding boxes."""
         return probiou(gt_bboxes, pd_bboxes).squeeze(-1).clamp_(0)
