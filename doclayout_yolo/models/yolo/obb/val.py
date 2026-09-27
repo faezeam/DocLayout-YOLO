@@ -40,12 +40,18 @@ class OBBValidator(DetectionValidator):
         """Apply Non-maximum suppression to prediction outputs.
 
         `conf` is accepted because this fork's BaseValidator always passes it, for the benefit of
-        YOLOv10's NMS-free head which has to threshold by hand. Rotated NMS already applies
-        self.args.conf, so there is nothing extra to do with it here.
+        YOLOv10's NMS-free head which thresholds by hand.
+
+        It defaults to 0.001 here because this fork dropped upstream's
+        `if self.args.conf is None: self.args.conf = 0.001` from BaseValidator.__init__, so
+        args.conf is None during training validation and rotated NMS asserts on it. The default is
+        restored locally rather than in BaseValidator on purpose: YOLOv10's postprocess reads
+        conf=None as "apply no confidence filter", so giving it 0.001 there would change detect
+        validation results.
         """
         return ops.non_max_suppression(
             preds,
-            self.args.conf,
+            0.001 if conf is None else conf,
             self.args.iou,
             labels=self.lb,
             nc=self.nc,
