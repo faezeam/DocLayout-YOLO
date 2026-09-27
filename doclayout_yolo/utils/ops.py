@@ -520,8 +520,9 @@ def ltwh2xywh(x):
 
 def xyxyxyxy2xywhr(corners):
     """
-    Convert batched Oriented Bounding Boxes (OBB) from [xy1, xy2, xy3, xy4] to [xywh, rotation]. Rotation values are
-    expected in degrees from 0 to 90.
+    Convert batched Oriented Bounding Boxes (OBB) from [xy1, xy2, xy3, xy4] to [xywh, rotation]. Rotation is
+    returned in RADIANS in (0, pi/2], as produced by cv2.minAreaRect. Note that w and h are whatever
+    minAreaRect returns and are NOT ordered long-edge-first; use regularize_rboxes for that.
 
     Args:
         corners (numpy.ndarray | torch.Tensor): Input corners of shape (n, 8).
@@ -547,8 +548,8 @@ def xyxyxyxy2xywhr(corners):
 
 def xywhr2xyxyxyxy(rboxes):
     """
-    Convert batched Oriented Bounding Boxes (OBB) from [xywh, rotation] to [xy1, xy2, xy3, xy4]. Rotation values should
-    be in degrees from 0 to 90.
+    Convert batched Oriented Bounding Boxes (OBB) from [xywh, rotation] to [xy1, xy2, xy3, xy4]. Rotation values are
+    in RADIANS. Any real angle is accepted; the conversion is a plain rotation by the given angle.
 
     Args:
         rboxes (numpy.ndarray | torch.Tensor): Boxes in [cx, cy, w, h, rotation] format of shape (n, 5) or (b, n, 5).
@@ -782,13 +783,18 @@ def scale_coords(img1_shape, coords, img0_shape, ratio_pad=None, normalize=False
 
 def regularize_rboxes(rboxes):
     """
-    Regularize rotated boxes in range [0, pi/2].
+    Regularize rotated boxes to long-edge form: w is the longer edge and the angle is in RADIANS in
+    [0, pi).
+
+    This differs from upstream Ultralytics >= 8.2, which instead maps the angle into [0, pi/2) and
+    does not guarantee w >= h. The long-edge form is kept here because it is what this fork has
+    always emitted; changing it would silently reinterpret every predicted angle.
 
     Args:
-        rboxes (torch.Tensor): (N, 5), xywhr.
+        rboxes (torch.Tensor): (N, 5), xywhr with rotation in radians.
 
     Returns:
-        (torch.Tensor): The regularized boxes.
+        (torch.Tensor): The regularized boxes, w >= h and r in [0, pi).
     """
     x, y, w, h, t = rboxes.unbind(dim=-1)
     # Swap edge and angle if h >= w
