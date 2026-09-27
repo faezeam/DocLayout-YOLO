@@ -36,8 +36,13 @@ class OBBValidator(DetectionValidator):
         val = self.data.get(self.args.split, "")  # validation path
         self.is_dota = isinstance(val, str) and "DOTA" in val  # is COCO
 
-    def postprocess(self, preds):
-        """Apply Non-maximum suppression to prediction outputs."""
+    def postprocess(self, preds, conf=None):
+        """Apply Non-maximum suppression to prediction outputs.
+
+        `conf` is accepted because this fork's BaseValidator always passes it, for the benefit of
+        YOLOv10's NMS-free head which has to threshold by hand. Rotated NMS already applies
+        self.args.conf, so there is nothing extra to do with it here.
+        """
         return ops.non_max_suppression(
             preds,
             self.args.conf,
