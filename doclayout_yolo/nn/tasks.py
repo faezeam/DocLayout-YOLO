@@ -249,17 +249,21 @@ class BaseModel(nn.Module):
             m.strides = fn(m.strides)
         return self
 
-    def load(self, weights, verbose=True):
+    def load(self, weights, verbose=True, exclude=()):
         """
         Load the weights into the model.
 
         Args:
             weights (dict | torch.nn.Module): The pre-trained weights to be loaded.
             verbose (bool, optional): Whether to log the transfer progress. Defaults to True.
+            exclude (tuple, optional): Key substrings to skip. Needed when the checkpoint's head is
+                shape-compatible with the target's but semantically different, e.g. transferring a
+                v10Detect checkpoint into an OBB head, where cv2 matches by shape and would
+                otherwise transfer silently.
         """
         model = weights["model"] if isinstance(weights, dict) else weights  # torchvision models are not dicts
         csd = model.float().state_dict()  # checkpoint state_dict as FP32
-        csd = intersect_dicts(csd, self.state_dict())  # intersect
+        csd = intersect_dicts(csd, self.state_dict(), exclude=exclude)  # intersect
         self.load_state_dict(csd, strict=False)  # load
         if verbose:
             LOGGER.info(f"Transferred {len(csd)}/{len(self.model.state_dict())} items from pretrained weights")
