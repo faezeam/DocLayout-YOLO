@@ -33,10 +33,14 @@ class DilatedBlock(nn.Module):
 
     def dilated_conv(self, x, dilation):
         act = self.dcv.act
-        bn = self.dcv.bn
         weight = self.dcv.conv.weight
         padding = dilation * (self.k//2)
-        return act(bn(F.conv2d(x, weight, stride=1, padding=padding, dilation=dilation)))
+        # conv.bias is None until BaseModel.fuse() folds BN into the convolution, after which `bn`
+        # is deleted and the normalization is already carried by conv weight/bias. Reading bn
+        # unconditionally raised AttributeError on every fused forward.
+        y = F.conv2d(x, weight, bias=self.dcv.conv.bias, stride=1, padding=padding, dilation=dilation)
+        bn = getattr(self.dcv, "bn", None)
+        return act(bn(y)) if bn is not None else act(y)
     
     def forward(self, x):
         """'forward()' applies the YOLO FPN to input data."""
